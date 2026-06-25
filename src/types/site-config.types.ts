@@ -39,6 +39,8 @@ export interface SiteConfig {
   skipVisual: boolean;
   /** Skip contact-form tests for this site */
   skipForms: boolean;
+  /** Mark as a legacy site — skips checks that assume modern responsive HTML (viewport meta, no horizontal overflow) */
+  isLegacySite: boolean;
   /** Authentication settings */
   auth: SiteAuth;
 }
@@ -55,6 +57,7 @@ const DEFAULT_CONFIG: SiteConfig = {
   viewports: ['desktop', 'mobile', 'tablet'],
   skipVisual: false,
   skipForms: false,
+  isLegacySite: false,
   auth: {
     required: false,
     loginUrl: '',
