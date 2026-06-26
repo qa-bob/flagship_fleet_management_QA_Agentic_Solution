@@ -1,10 +1,10 @@
 {
     "name": "Flagship Fleet Management",
     "url": "https://www.flagshipfleet.com",
-    "description": "",
-    "industry": "",
+    "description": "Legacy ColdFusion fleet management software and analysis platform",
+    "industry": "Fleet Management Software",
     "hasContactForm": false,
-    "expectedNavItems": [],
+    "expectedNavItems": ["Customer Center", "Complete Fleet", "Enhancement"],
     "viewports": ["desktop", "mobile", "tablet"],
     "skipVisual": false,
     "skipForms": false,
