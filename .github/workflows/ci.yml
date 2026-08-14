@@ -1,0 +1,175 @@
+name: Playwright Tests
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── Smoke gate — runs first, fast ──────────────────────────────────────────
+  smoke:
+    name: Smoke Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers (Chromium only for smoke)
+        run: npx playwright install chromium --with-deps
+
+      - name: Run smoke tests
+        run: npx playwright test --grep @smoke --project=chromium-desktop
+        env:
+          CI: true
+
+      - name: Upload smoke results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-results
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+
+  # ── Full suite — runs after smoke passes ───────────────────────────────────
+  full-suite:
+    name: Full Test Suite
+    runs-on: ubuntu-latest
+    needs: smoke
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+
+      - name: Run full test suite (shard ${{ matrix.shard }}/3)
+        run: npx playwright test --shard=${{ matrix.shard }}/3
+        env:
+          CI: true
+
+      - name: Upload shard results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-shard-${{ matrix.shard }}
+          path: |
+            playwright-report/
+            test-results/
+            __snapshots__/
+          retention-days: 14
+
+  # ── Merge reports from all shards ─────────────────────────────────────────
+  merge-reports:
+    name: Merge Test Reports
+    runs-on: ubuntu-latest
+    needs: full-suite
+    if: always()
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download shard 1
+        uses: actions/download-artifact@v4
+        with:
+          name: test-results-shard-1
+          path: all-blob-reports/shard-1
+
+      - name: Download shard 2
+        uses: actions/download-artifact@v4
+        with:
+          name: test-results-shard-2
+          path: all-blob-reports/shard-2
+
+      - name: Download shard 3
+        uses: actions/download-artifact@v4
+        with:
+          name: test-results-shard-3
+          path: all-blob-reports/shard-3
+
+      - name: Merge reports
+        run: npx playwright merge-reports --reporter html ./all-blob-reports
+
+      - name: Upload merged report
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-merged
+          path: playwright-report/
+          retention-days: 30
+
+  # ── TypeScript type-check ─────────────────────────────────────────────────
+  typecheck:
+    name: TypeScript Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check
+        run: npm run typecheck
+
+  # ── ESLint ────────────────────────────────────────────────────────────────
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint

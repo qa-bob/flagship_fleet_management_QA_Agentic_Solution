@@ -1,0 +1,22 @@
+# CODEOWNERS
+# Each line is a file pattern followed by one or more owners.
+# Owners are automatically requested for review on PRs touching matching files.
+
+# Default owner for everything
+* @rosmall
+
+# Core config — require explicit review
+site.config.json @rosmall
+playwright.config.ts @rosmall
+CLAUDE.md @rosmall
+
+# CI pipeline changes
+.github/workflows/ @rosmall
+
+# Visual baselines — screenshot changes need explicit sign-off
+__snapshots__/ @rosmall
+
+# Page Object Model — structural changes affect all tests
+src/pages/ @rosmall
+src/fixtures/ @rosmall
+src/types/ @rosmall

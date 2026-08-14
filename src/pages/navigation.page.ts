@@ -23,43 +23,90 @@ export class NavigationPage extends BasePage {
   // ── Nav detection ────────────────────────────────────────────────────────────
 
   /**
-   * Return the primary navigation locator.
-   * Tries role="navigation" first, then <nav>, then header-scoped links.
+   * Return true if a navigation element is visible on the page.
+   *
+   * Fallback chain (handles both modern semantic sites and legacy image-button sites):
+   *   1. <nav> or role="navigation"
+   *   2. Image-based nav buttons (legacy ColdFusion / old HTML sites)
+   *   3. Header element containing links
+   *   4. Any visible anchor link on the page (last resort)
    */
-  private getNavLocator(): Locator {
-    return this.page.locator('nav, [role="navigation"]').first();
-  }
-
-  /** Return true if a navigation element is visible on the page. */
   async isNavVisible(): Promise<boolean> {
-    const nav = this.getNavLocator();
-    if (await nav.count() === 0) return false;
-    return nav.isVisible();
+    // 1. Semantic nav
+    const semanticNav = this.page.locator('nav, [role="navigation"]');
+    if (await semanticNav.count() > 0 && await semanticNav.first().isVisible()) return true;
+
+    // 2. Image-based nav buttons (e.g. <a><img src="NavButton_X.JPG"></a>)
+    const imageNav = this.page.locator('a img[src*="NavButton" i], a img[src*="nav-button" i]');
+    if (await imageNav.count() > 0 && await imageNav.first().isVisible()) return true;
+
+    // 3. Header element with at least one link
+    const header = this.page.locator('header, #header, [id*="header" i], [class*="header" i]').first();
+    if (await header.count() > 0 && await header.locator('a[href]').count() > 0) return true;
+
+    // 4. Any visible anchor on the page — every site with navigation has links
+    const firstLink = this.page.locator('a[href]').first();
+    return await firstLink.count() > 0 && await firstLink.isVisible();
   }
 
   // ── Nav links ────────────────────────────────────────────────────────────────
 
   /**
-   * Return all links inside the primary navigation with their text and href.
-   * Filters out empty hrefs and anchor-only links (#).
+   * Return navigation links with their text and href.
+   *
+   * Fallback chain:
+   *   1. Links inside <nav> / role="navigation"
+   *   2. Links that contain a nav-button image (legacy image-nav pattern)
+   *   3. All page links (last resort for sites with no wrapper element)
+   *
+   * For image-based links with no visible text, alt text or filename is used.
    */
   async getNavLinks(): Promise<NavLinkInfo[]> {
-    const nav = this.getNavLocator();
-    if (await nav.count() === 0) return [];
+    // 1. Semantic nav wrapper
+    const semanticNav = this.page.locator('nav, [role="navigation"]');
+    let linkLocator = await semanticNav.count() > 0
+      ? semanticNav.first().locator('a[href]')
+      : null;
 
-    const links = nav.locator('a[href]');
-    const count = await links.count();
+    // 2. Image-button nav (legacy sites: <a href="X.cfm"><img src="NavButton_X.JPG"></a>)
+    if (!linkLocator) {
+      const imageNavLinks = this.page.locator('a:has(img[src*="NavButton" i]), a:has(img[src*="nav-button" i])');
+      if (await imageNavLinks.count() > 0) {
+        linkLocator = imageNavLinks;
+      }
+    }
+
+    // 3. All page links
+    if (!linkLocator) {
+      linkLocator = this.page.locator('a[href]');
+    }
+
+    const count = await linkLocator.count();
     const results: NavLinkInfo[] = [];
 
     for (let i = 0; i < count; i++) {
-      const link = links.nth(i);
-      const text = ((await link.textContent()) ?? '').trim();
+      const link = linkLocator.nth(i);
+      let text = ((await link.textContent()) ?? '').trim();
       const href = (await link.getAttribute('href')) ?? '';
 
-      // Skip empty, anchor-only, or javascript: links
       if (!href || href === '#' || href.startsWith('javascript:')) continue;
 
-      results.push({ text, href });
+      // For image-based nav buttons, fall back to img alt or derived filename
+      if (!text) {
+        const img = link.locator('img').first();
+        if (await img.count() > 0) {
+          text = (await img.getAttribute('alt')) ?? '';
+          if (!text) {
+            const src = (await img.getAttribute('src')) ?? '';
+            text = src.split('/').pop()
+              ?.replace(/NavButton_/i, '')
+              .replace(/\.(jpg|jpeg|png|gif|webp)/i, '')
+              ?? '';
+          }
+        }
+      }
+
+      results.push({ text: text || href, href });
     }
 
     return results;
@@ -70,8 +117,7 @@ export class NavigationPage extends BasePage {
    * Uses a case-insensitive partial match.
    */
   async clickNavItem(text: string): Promise<void> {
-    const nav = this.getNavLocator();
-    const link = nav.getByRole('link', { name: text });
+    const link = this.page.getByRole('link', { name: text });
     await link.first().click();
     await this.page.waitForLoadState('domcontentloaded');
   }

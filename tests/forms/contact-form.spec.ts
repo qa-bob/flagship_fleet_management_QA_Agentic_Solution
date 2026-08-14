@@ -4,6 +4,10 @@
  * Contact form tests — verify the presence and structure of contact forms.
  * IMPORTANT: These tests do NOT submit forms to avoid sending spam.
  *
+ * When hasContactForm is false, form-specific tests are skipped and the suite
+ * instead verifies that the site provides an alternative contact mechanism
+ * (mailto: links, phone numbers).
+ *
  * Tag: @forms
  */
 
@@ -17,15 +21,47 @@ test.describe('Contact Form @forms', () => {
     }
   });
 
-  // ── Form presence ───────────────────────────────────────────────────────────
+  // ── Contact mechanism presence (always runs) ────────────────────────────────
 
-  test('contact form is present on site @forms', async ({ contactPage, siteConfig, page }) => {
-    // Check homepage first
-    await contactPage.navigate();
+  test('site has an accessible contact mechanism @forms', async ({ siteConfig, contactPage, page }) => {
+    await page.goto(siteConfig.url, { waitUntil: 'domcontentloaded' });
+
+    if (!siteConfig.hasContactForm) {
+      // Site uses email/phone rather than an HTML form — verify contact info is visible
+      const mailtoLinks = page.locator('a[href^="mailto:"]');
+      const mailtoCount = await mailtoLinks.count();
+
+      const telLinks = page.locator('a[href^="tel:"]');
+      const telCount = await telLinks.count();
+
+      // Check page text for email addresses or phone patterns
+      const bodyText = await page.evaluate(() => document.body.innerText);
+      const hasEmailText = /[\w.+-]+@[\w-]+\.\w+/.test(bodyText);
+      const hasPhoneText = /(\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}/.test(bodyText);
+
+      const hasAnyContact = mailtoCount > 0 || telCount > 0 || hasEmailText || hasPhoneText;
+
+      expect(
+        hasAnyContact,
+        `"${siteConfig.name}" has no HTML contact form (hasContactForm: false) and no ` +
+          'visible email/phone contact information was found on the homepage.'
+      ).toBeTruthy();
+
+      if (mailtoCount > 0) {
+        const emails: string[] = [];
+        for (let i = 0; i < mailtoCount; i++) {
+          const href = await mailtoLinks.nth(i).getAttribute('href');
+          if (href) emails.push(href.replace('mailto:', ''));
+        }
+        console.info(`[forms] Contact via email: ${emails.join(', ')}`);
+      }
+      return;
+    }
+
+    // hasContactForm: true — find the HTML form
     let form = await contactPage.findContactForm();
 
     if (!form) {
-      // Try /contact, /contact-us, /get-in-touch
       const contactPaths = ['/contact', '/contact-us', '/get-in-touch', '/reach-out'];
       for (const contactPath of contactPaths) {
         try {
@@ -42,7 +78,6 @@ test.describe('Contact Form @forms', () => {
     }
 
     if (!form) {
-      // Also check if there's a "Contact" link in nav to follow
       const contactLink = page.locator('a').filter({ hasText: /contact/i }).first();
       if (await contactLink.count() > 0) {
         await contactLink.click();
@@ -58,10 +93,41 @@ test.describe('Contact Form @forms', () => {
     ).not.toBeNull();
   });
 
-  // ── Required fields ─────────────────────────────────────────────────────────
+  // ── mailto: link quality (runs when hasContactForm is false) ─────────────────
+
+  test('contact email links are valid mailto: hrefs @forms', async ({ siteConfig, page }) => {
+    if (siteConfig.hasContactForm) {
+      test.skip(true, 'Site uses an HTML form — mailto: check not applicable');
+      return;
+    }
+
+    await page.goto(siteConfig.url, { waitUntil: 'domcontentloaded' });
+    const mailtoLinks = page.locator('a[href^="mailto:"]');
+    const count = await mailtoLinks.count();
+
+    if (count === 0) {
+      console.warn(`[forms] No mailto: links found on "${siteConfig.name}" homepage.`);
+      return;
+    }
+
+    for (let i = 0; i < count; i++) {
+      const href = await mailtoLinks.nth(i).getAttribute('href');
+      expect(href, `mailto: link ${i} should have a non-empty href`).toBeTruthy();
+      expect(
+        href!.replace('mailto:', ''),
+        `mailto: link ${i} should contain an @ character`
+      ).toContain('@');
+    }
+  });
+
+  // ── Required fields ──────────────────────────────────────────────────────────
 
   test('contact form has required fields (name, email) @forms', async ({ contactPage, siteConfig, page }) => {
-    // Navigate to find the form
+    if (!siteConfig.hasContactForm) {
+      test.skip(true, `"${siteConfig.name}" uses email contact links, not an HTML form (hasContactForm: false)`);
+      return;
+    }
+
     await contactPage.navigate();
     let form = await contactPage.findContactForm();
 
@@ -74,7 +140,7 @@ test.describe('Contact Form @forms', () => {
     }
 
     if (!form) {
-      test.skip(true, 'No contact form found — covered by "contact form is present" test');
+      test.skip(true, 'No contact form found — covered by "contact mechanism" test');
       return;
     }
 
@@ -91,9 +157,14 @@ test.describe('Contact Form @forms', () => {
     }
   });
 
-  // ── Submit button ───────────────────────────────────────────────────────────
+  // ── Submit button ────────────────────────────────────────────────────────────
 
   test('contact form has a submit button @forms', async ({ contactPage, siteConfig, page }) => {
+    if (!siteConfig.hasContactForm) {
+      test.skip(true, `"${siteConfig.name}" uses email contact links, not an HTML form (hasContactForm: false)`);
+      return;
+    }
+
     await contactPage.navigate();
     let form = await contactPage.findContactForm();
 
@@ -114,9 +185,14 @@ test.describe('Contact Form @forms', () => {
     expect(hasSubmit, 'Contact form should have a visible submit button').toBeTruthy();
   });
 
-  // ── Labels and placeholders ─────────────────────────────────────────────────
+  // ── Labels and placeholders ──────────────────────────────────────────────────
 
   test('form fields have proper labels or placeholders @forms', async ({ contactPage, siteConfig, page }) => {
+    if (!siteConfig.hasContactForm) {
+      test.skip(true, `"${siteConfig.name}" uses email contact links, not an HTML form (hasContactForm: false)`);
+      return;
+    }
+
     await contactPage.navigate();
     let form = await contactPage.findContactForm();
 
@@ -139,7 +215,6 @@ test.describe('Contact Form @forms', () => {
     for (const field of fields) {
       if (field.type === 'hidden' || field.type === 'submit') continue;
 
-      // Check for associated <label>, aria-label, or placeholder
       const fieldLocator = form.locator(
         `input[name="${field.name}"], textarea[name="${field.name}"]`
       ).first();
@@ -165,11 +240,10 @@ test.describe('Contact Form @forms', () => {
       );
     }
 
-    // Soft assertion — warn but do not fail (label presence is accessibility best practice)
     expect(
       unlabeledFields.length,
       `${unlabeledFields.length} form field(s) have no label, aria-label, or placeholder`
-    ).toBeLessThanOrEqual(fields.length / 2); // Allow max 50% unlabeled
+    ).toBeLessThanOrEqual(fields.length / 2);
   });
 
   // ── HTML5 validation ─────────────────────────────────────────────────────────
@@ -179,6 +253,11 @@ test.describe('Contact Form @forms', () => {
     siteConfig,
     page,
   }) => {
+    if (!siteConfig.hasContactForm) {
+      test.skip(true, `"${siteConfig.name}" uses email contact links, not an HTML form (hasContactForm: false)`);
+      return;
+    }
+
     await contactPage.navigate();
     let form = await contactPage.findContactForm();
 
@@ -201,12 +280,10 @@ test.describe('Contact Form @forms', () => {
       return;
     }
 
-    // Click submit without filling any fields
     const submitBtn = form
       .locator('button[type="submit"], input[type="submit"], button:not([type="button"]):not([type="reset"])')
       .first();
 
-    // Intercept any navigation that would result from form submission
     let navigationTriggered = false;
     page.on('request', (req) => {
       if (req.resourceType() === 'document' && req.method() === 'POST') {
@@ -215,17 +292,13 @@ test.describe('Contact Form @forms', () => {
     });
 
     await submitBtn.click({ force: true });
-
-    // Wait briefly to allow validation messages to appear
     await page.waitForTimeout(500);
 
-    // Check that we're still on the same page (form was NOT submitted)
     expect(
       navigationTriggered,
       'Clicking submit on an empty form should NOT navigate away (validation should prevent submission)'
     ).toBeFalsy();
 
-    // Check for HTML5 validation API on required fields
     const firstRequired = form.locator('[required]').first();
     if (await firstRequired.count() > 0) {
       const isValid = await firstRequired.evaluate<boolean>((el) => {
