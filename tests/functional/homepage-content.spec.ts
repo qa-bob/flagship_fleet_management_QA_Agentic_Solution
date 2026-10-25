@@ -14,7 +14,7 @@ import { test, expect } from '@fixtures/site.fixture';
 test.describe('Homepage Business Content @functional', () => {
   test.beforeEach(async ({ page, siteConfig }) => {
     await page.goto(siteConfig.url, { waitUntil: 'domcontentloaded' });
-    await page.waitForLoadState('networkidle', { timeout: 8_000 }).catch(() => {});
+    await page.waitForLoadState('load');
   });
 
   // ── Primary content ─────────────────────────────────────────────────────────
@@ -85,10 +85,7 @@ test.describe('Homepage Business Content @functional', () => {
   test('CTA buttons are visible and interactable @functional', async ({ homePage }) => {
     const ctaButtons = await homePage.getCTAButtons();
 
-    if (ctaButtons.length === 0) {
-      console.warn('[functional] No CTA buttons found — skipping visibility check.');
-      return;
-    }
+    test.skip(ctaButtons.length === 0, 'No CTA buttons found');
 
     // Check the first CTA is visible
     await expect(
@@ -173,10 +170,7 @@ test.describe('Homepage Business Content @functional', () => {
     const footer = page.locator('footer, [role="contentinfo"]');
     const footerCount = await footer.count();
 
-    if (footerCount === 0) {
-      console.warn('[functional] No <footer> found — skipping footer assertion.');
-      return;
-    }
+    test.skip(footerCount === 0, 'No <footer> found');
 
     await expect(footer.first(), 'Footer should be visible').toBeVisible();
 
@@ -210,10 +204,7 @@ test.describe('Homepage Business Content @functional', () => {
   test('homepage images have alt attributes @functional', async ({ page }) => {
     const images = await page.locator('img').all();
 
-    if (images.length === 0) {
-      console.warn('[functional] No images found on the homepage.');
-      return;
-    }
+    test.skip(images.length === 0, 'No images found on the homepage');
 
     const missingAlt: string[] = [];
     for (const img of images) {

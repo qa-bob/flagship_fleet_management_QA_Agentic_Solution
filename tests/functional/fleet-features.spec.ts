@@ -18,7 +18,7 @@ test.describe('Fleet Management Features @functional', () => {
   test.beforeEach(async ({ page, siteConfig }) => {
     featuresPage = new FeaturesPage(page, siteConfig);
     await page.goto(siteConfig.url, { waitUntil: 'domcontentloaded' });
-    await page.waitForLoadState('networkidle', { timeout: 8_000 }).catch(() => {});
+    await page.waitForLoadState('load');
   });
 
   // ── Key content presence ────────────────────────────────────────────────────
@@ -134,10 +134,7 @@ test.describe('Fleet Management Features @functional', () => {
       );
       const count = await ctaLinks.count();
 
-      if (count === 0) {
-        console.warn('[functional] No CTA links found — skipping href check.');
-        return;
-      }
+      test.skip(count === 0, 'No CTA links found');
 
       const siteOrigin = new URL(siteConfig.url).origin;
       const hrefs: string[] = [];
@@ -185,10 +182,7 @@ test.describe('Fleet Management Features @functional', () => {
       }
 
       if (!servicesLink) {
-        console.warn(
-          '[functional] No services/solutions/features link found in navigation. ' +
-          'This test is skipped — run /analyze-site to update expectedNavItems.'
-        );
+        test.skip(true, 'No services/solutions/features link found in navigation');
         return;
       }
 
@@ -224,10 +218,7 @@ test.describe('Fleet Management Features @functional', () => {
   test('FAQ or accordion items expand when clicked @functional', async ({ page }) => {
     const expanded = await featuresPage.expandFirstAccordionItem();
 
-    if (!expanded) {
-      console.warn('[functional] No accordion or FAQ items found — skipping interaction test.');
-      return;
-    }
+    test.skip(!expanded, 'No accordion or FAQ items found');
 
     // After clicking, some content should be visible
     const expandedContent = page.locator(
@@ -250,10 +241,7 @@ test.describe('Fleet Management Features @functional', () => {
     async ({ page }) => {
       const hasVideo = await featuresPage.hasVideoContent();
 
-      if (!hasVideo) {
-        console.info('[functional] No video embeds found on homepage — skipping video check.');
-        return;
-      }
+      test.skip(!hasVideo, 'No video embeds found on homepage');
 
       const video = featuresPage.videoEmbeds.first();
       await expect(video, 'Video embed should be visible').toBeVisible();
@@ -263,7 +251,9 @@ test.describe('Fleet Management Features @functional', () => {
   // ── Contact page (if present) ────────────────────────────────────────────────
 
   test('contact link is accessible from the homepage @functional',
-    async ({ page, siteConfig }) => {
+    async ({ page, siteConfig }, testInfo) => {
+      // Small viewports usually hide the nav behind a toggle — covered by the mobile nav test
+      test.skip(testInfo.project.name !== 'chromium-desktop', 'Runs only in the "chromium-desktop" project');
       const contactPatterns = /contact|get in touch|reach us|talk to us/i;
 
       // Check semantic nav first
@@ -283,13 +273,10 @@ test.describe('Fleet Management Features @functional', () => {
       const footerCount = await footerContactLink.count();
       const mailtoCount = await mailtoLink.count();
 
-      if (navCount === 0 && footerCount === 0 && mailtoCount === 0) {
-        console.warn(
-          '[functional] No contact link found in nav, footer, or as mailto:/tel:. ' +
-          'This may be fine if the site uses inline CTAs only.'
-        );
-        return;
-      }
+      test.skip(
+        navCount === 0 && footerCount === 0 && mailtoCount === 0,
+        'No contact link found in nav, footer, or as mailto:/tel:'
+      );
 
       // Prefer semantic nav > footer > mailto fallback
       const contactLink = navCount > 0 ? navContactLink
