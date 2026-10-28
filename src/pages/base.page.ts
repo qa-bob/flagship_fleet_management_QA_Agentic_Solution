@@ -27,15 +27,9 @@ export class BasePage {
     await this.page.goto(this.url, { waitUntil: 'domcontentloaded' });
   }
 
-  /**
-   * Wait until network activity has settled.
-   * Falls back gracefully if networkidle is never reached (e.g. sites with
-   * background polling or analytics that keep connections alive).
-   */
+  /** Wait until the page and its subresources have loaded. */
   async waitForLoad(): Promise<void> {
-    await this.page.waitForLoadState('networkidle', { timeout: 8_000 }).catch(() => {
-      // Swallow timeout — page content is loaded even if background requests linger
-    });
+    await this.page.waitForLoadState('load');
   }
 
   // ── Page metadata ───────────────────────────────────────────────────────────
